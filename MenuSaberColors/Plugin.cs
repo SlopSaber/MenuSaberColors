@@ -22,7 +22,7 @@ namespace MenuSaberColors
         public Plugin(IPALogger logger, Zenjector zenjector)
         {
             zenjector.UseLogger(logger);
-            zenjector.Install<PCAppInit>((Container) =>
+            zenjector.Install<BeatSaberInit>((Container) =>
             {
                 Container.BindInterfacesTo<Patches>().AsSingle();
             });
