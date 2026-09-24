@@ -118,6 +118,10 @@
       <HintPath>$(GameDirectory)\Beat Saber_Data\Managed\UnityEngine.VRModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.XRModule">
+      <HintPath>$(GameDirectory)\Beat Saber_Data\Managed\UnityEngine.XRModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="VRUI, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <Private>False</Private>
       <HintPath>$(GameDirectory)\Beat Saber_Data\Managed\VRUI.dll</HintPath>

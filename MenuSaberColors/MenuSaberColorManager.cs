@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.XR;
 using VRUIControls;
 using Zenject;
 
@@ -20,6 +21,8 @@ namespace MenuSaberColors
         public List<SetSaberGlowColor> rightSideSabers = new List<SetSaberGlowColor>();
 
         private ColorSchemesSettings playerColorSchemesSettings;
+        private Coroutine pendingRefresh;
+        private bool loggedRefreshError;
 
         [Inject]
         internal void Construct(PlayerDataModel dataModel, SiraLog logger)
@@ -29,32 +32,92 @@ namespace MenuSaberColors
             Patches.ShouldSaberColorsBeUpdated += this.RefreshData;
         }
 
+        private void Start()
+        {
+            RefreshData(MenuEnvironmentManager.MenuEnvironmentType.Default);
+        }
+
+        private void OnDestroy()
+        {
+            Patches.ShouldSaberColorsBeUpdated -= RefreshData;
+        }
+
         public void RefreshData(MenuEnvironmentManager.MenuEnvironmentType menuEnvironmentType)
         {
-            if (menuEnvironmentType == MenuEnvironmentManager.MenuEnvironmentType.None) return;
-
-            try
+            if (menuEnvironmentType == MenuEnvironmentManager.MenuEnvironmentType.None)
             {
-                List<VRController> controllers = Resources.FindObjectsOfTypeAll<VRController>().ToList();
-                if (controllers.Count > 0)
+                if (pendingRefresh != null)
                 {
-                    leftSideSabers.Clear();
-                    rightSideSabers.Clear();
-
-                    foreach (SetSaberGlowColor saber1 in controllers[1].GetComponentsInChildren<SetSaberGlowColor>(true))
-                        leftSideSabers.Add(saber1);
-
-                    foreach (SetSaberGlowColor saber2 in controllers[0].GetComponentsInChildren<SetSaberGlowColor>(true))
-                        rightSideSabers.Add(saber2);
+                    StopCoroutine(pendingRefresh);
+                    pendingRefresh = null;
                 }
-            }
-            catch (Exception ex)
-            {
-                logger.Error("Error occured while refreshing saber data.\n" + ex);
                 return;
             }
 
-            this.UpdateSaberColors();
+            if (TryRefreshData())
+            {
+                if (pendingRefresh != null)
+                {
+                    StopCoroutine(pendingRefresh);
+                    pendingRefresh = null;
+                }
+            }
+            else if (pendingRefresh == null)
+            {
+                pendingRefresh = StartCoroutine(RefreshWhenReady());
+            }
+        }
+
+        private IEnumerator RefreshWhenReady()
+        {
+            var wait = new WaitForSeconds(0.2f);
+            for (int attempt = 0; attempt < 50; attempt++)
+            {
+                yield return wait;
+                if (TryRefreshData())
+                {
+                    pendingRefresh = null;
+                    yield break;
+                }
+            }
+            pendingRefresh = null;
+        }
+
+        private bool TryRefreshData()
+        {
+            try
+            {
+                var controllers = Resources.FindObjectsOfTypeAll<VRController>()
+                    .Where(controller => controller != null && controller.isActiveAndEnabled && controller.gameObject.scene.isLoaded);
+                var left = controllers.FirstOrDefault(controller => controller.node == XRNode.LeftHand &&
+                    controller.GetComponentInChildren<SetSaberGlowColor>(true) != null);
+                var right = controllers.FirstOrDefault(controller => controller.node == XRNode.RightHand &&
+                    controller.GetComponentInChildren<SetSaberGlowColor>(true) != null);
+                if (left == null || right == null) return false;
+
+                var leftGlows = left.GetComponentsInChildren<SetSaberGlowColor>(true);
+                var rightGlows = right.GetComponentsInChildren<SetSaberGlowColor>(true);
+                if (leftGlows.Length == 0 || rightGlows.Length == 0 ||
+                    leftGlows.Any(glow => glow.GetField<ColorManager, SetSaberGlowColor>("_colorManager") == null) ||
+                    rightGlows.Any(glow => glow.GetField<ColorManager, SetSaberGlowColor>("_colorManager") == null))
+                    return false;
+
+                leftSideSabers.Clear();
+                leftSideSabers.AddRange(leftGlows);
+                rightSideSabers.Clear();
+                rightSideSabers.AddRange(rightGlows);
+                UpdateSaberColors();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (!loggedRefreshError)
+                {
+                    logger.Error("Error occurred while refreshing saber data.\n" + ex);
+                    loggedRefreshError = true;
+                }
+                return false;
+            }
         }
 
         private void UpdateSaberColors()
