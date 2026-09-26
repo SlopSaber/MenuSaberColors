@@ -23,6 +23,7 @@ namespace MenuSaberColors
 
         private ColorSchemesSettings playerColorSchemesSettings;
         private Coroutine pendingRefresh;
+        private bool refreshWhenEnabled;
         private bool loggedRefreshError;
 
         [Inject]
@@ -31,6 +32,22 @@ namespace MenuSaberColors
             this.logger = logger;
             playerColorSchemesSettings = dataModel.playerData.colorSchemesSettings;
             Patches.ShouldSaberColorsBeUpdated += this.RefreshData;
+            if (refreshWhenEnabled && isActiveAndEnabled)
+                RefreshData(MenuEnvironmentManager.MenuEnvironmentType.Default);
+        }
+
+        private void OnEnable()
+        {
+            if (refreshWhenEnabled && playerColorSchemesSettings != null)
+                RefreshData(MenuEnvironmentManager.MenuEnvironmentType.Default);
+        }
+
+        private void OnDisable()
+        {
+            if (pendingRefresh == null) return;
+            StopCoroutine(pendingRefresh);
+            pendingRefresh = null;
+            refreshWhenEnabled = true;
         }
 
         private void Start()
@@ -47,6 +64,7 @@ namespace MenuSaberColors
         {
             if (menuEnvironmentType == MenuEnvironmentManager.MenuEnvironmentType.None)
             {
+                refreshWhenEnabled = false;
                 if (pendingRefresh != null)
                 {
                     StopCoroutine(pendingRefresh);
@@ -55,6 +73,13 @@ namespace MenuSaberColors
                 return;
             }
 
+            if (!isActiveAndEnabled)
+            {
+                refreshWhenEnabled = true;
+                return;
+            }
+
+            refreshWhenEnabled = false;
             if (TryRefreshData())
             {
                 if (pendingRefresh != null)
