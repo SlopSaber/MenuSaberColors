@@ -19,6 +19,7 @@ namespace MenuSaberColors
         public MethodInfo setColorsMethod = typeof(SetSaberGlowColor).GetMethod("SetColors");
         public List<SetSaberGlowColor> leftSideSabers = new List<SetSaberGlowColor>();
         public List<SetSaberGlowColor> rightSideSabers = new List<SetSaberGlowColor>();
+        internal event Action SabersRefreshed;
 
         private ColorSchemesSettings playerColorSchemesSettings;
         private Coroutine pendingRefresh;
@@ -107,6 +108,7 @@ namespace MenuSaberColors
                 rightSideSabers.Clear();
                 rightSideSabers.AddRange(rightGlows);
                 UpdateSaberColors();
+                SabersRefreshed?.Invoke();
                 return true;
             }
             catch (Exception ex)
@@ -130,14 +132,14 @@ namespace MenuSaberColors
             {
                 ColorManager colorManager = obj?.GetField<ColorManager, SetSaberGlowColor>("_colorManager");
                 colorManager?.SetField("_colorScheme", colorScheme);
-                setColorsMethod?.Invoke(obj, null);
+                if (obj != null && colorManager != null) obj.SetColors();
             }
 
             foreach (SetSaberGlowColor obj in rightSideSabers)
             {
                 ColorManager colorManager = obj?.GetField<ColorManager, SetSaberGlowColor>("_colorManager");
                 colorManager?.SetField("_colorScheme", colorScheme);
-                setColorsMethod?.Invoke(obj, null);
+                if (obj != null && colorManager != null) obj.SetColors();
             }
         }
     }
@@ -225,48 +227,82 @@ namespace MenuSaberColors
         private readonly FieldAccessor<ColorScheme, Color>.Accessor saberBColorAccessor = FieldAccessor<ColorScheme, Color>.GetAccessor("_saberBColor");
         private ColorScheme aprilFools = null;
         private Material pointerMaterial;
-        private bool ready;
+        private readonly Dictionary<ColorManager, ColorScheme> originalSchemes = new Dictionary<ColorManager, ColorScheme>();
+        private readonly Dictionary<MeshRenderer, Material> originalPointerMaterials = new Dictionary<MeshRenderer, Material>();
 
         public void Start()
         {
-            VRLaserPointer[] pointers = Resources.FindObjectsOfTypeAll<VRLaserPointer>();
-
-            pointerMaterial = pointers[1].GetComponent<MeshRenderer>().material;
-            pointers[0].GetComponent<MeshRenderer>().material = pointerMaterial;
-
-            base.StartCoroutine(this.WaitForColorManager());
+            colorManager.SabersRefreshed += RefreshSabers;
+            RefreshSabers();
         }
 
-        private IEnumerator WaitForColorManager()
+        private void RefreshSabers()
         {
-            yield return new WaitUntil(() => colorManager.leftSideSabers != null && colorManager.rightSideSabers != null);
+            foreach (SetSaberGlowColor glow in colorManager.leftSideSabers) ApplyScheme(glow);
+            foreach (SetSaberGlowColor glow in colorManager.rightSideSabers) ApplyScheme(glow);
+            if (aprilFools == null) return;
 
-            colorManager.leftSideSabers[0].GetField<ColorManager, SetSaberGlowColor>("_colorManager").SetField("_colorScheme", aprilFools);
-            colorManager.leftSideSabers[1].GetField<ColorManager, SetSaberGlowColor>("_colorManager").SetField("_colorScheme", aprilFools);
-            colorManager.rightSideSabers[0].GetField<ColorManager, SetSaberGlowColor>("_colorManager").SetField("_colorScheme", aprilFools);
-            colorManager.rightSideSabers[1].GetField<ColorManager, SetSaberGlowColor>("_colorManager").SetField("_colorScheme", aprilFools);
+            foreach (VRLaserPointer pointer in Resources.FindObjectsOfTypeAll<VRLaserPointer>())
+            {
+                if (pointer == null || !pointer.isActiveAndEnabled || !pointer.gameObject.scene.isLoaded) continue;
+                MeshRenderer renderer = pointer.GetComponent<MeshRenderer>();
+                if (renderer == null || renderer.sharedMaterial == null || originalPointerMaterials.ContainsKey(renderer)) continue;
+                originalPointerMaterials.Add(renderer, renderer.sharedMaterial);
+                if (pointerMaterial == null) pointerMaterial = new Material(renderer.sharedMaterial);
+                renderer.sharedMaterial = pointerMaterial;
+            }
+        }
 
-            ready = true;
+        private void ApplyScheme(SetSaberGlowColor glow)
+        {
+            if (glow == null) return;
+            ColorManager manager = glow.GetField<ColorManager, SetSaberGlowColor>("_colorManager");
+            if (manager == null || originalSchemes.ContainsKey(manager)) return;
+            ColorScheme original = manager.GetField<ColorScheme, ColorManager>("_colorScheme");
+            if (original == null) return;
+            if (aprilFools == null)
+                aprilFools = new ColorScheme(original, original.overrideNotes, original.saberAColor, original.saberBColor,
+                    original.overrideLights, original.environmentColor0, original.environmentColor1, original.environmentColorW,
+                    original.supportsEnvironmentColorBoost, original.environmentColor0Boost, original.environmentColor1Boost,
+                    original.environmentColorWBoost, original.obstaclesColor);
+            originalSchemes.Add(manager, original);
+            manager.SetField("_colorScheme", aprilFools);
+        }
+
+        private void OnDestroy()
+        {
+            if (colorManager != null) colorManager.SabersRefreshed -= RefreshSabers;
+            foreach (var pair in originalSchemes)
+            {
+                if (ReferenceEquals(pair.Key.GetField<ColorScheme, ColorManager>("_colorScheme"), aprilFools))
+                    pair.Key.SetField("_colorScheme", pair.Value);
+            }
+            foreach (var pair in originalPointerMaterials)
+            {
+                if (pair.Key != null && pair.Key.sharedMaterial == pointerMaterial)
+                    pair.Key.sharedMaterial = pair.Value;
+            }
+            if (pointerMaterial != null) Destroy(pointerMaterial);
         }
 
         public void Update()
         {
-            if (ready)
+            if (aprilFools != null)
             {
                 Color rainbow = HSBColor.ToColor(new HSBColor(Mathf.PingPong(Time.time * 0.5f, 1f), 1f, 1f));
 
                 saberAColorAccessor(ref aprilFools) = rainbow;
                 saberBColorAccessor(ref aprilFools) = rainbow;
-                pointerMaterial.color = rainbow;
+                if (pointerMaterial != null) pointerMaterial.color = rainbow;
 
                 foreach (SetSaberGlowColor obj in colorManager.leftSideSabers)
                 {
-                    colorManager.setColorsMethod?.Invoke(obj, null);
+                    if (obj != null && obj.gameObject.activeInHierarchy) obj.SetColors();
                 }
 
                 foreach (SetSaberGlowColor obj in colorManager.rightSideSabers)
                 {
-                    colorManager.setColorsMethod?.Invoke(obj, null);
+                    if (obj != null && obj.gameObject.activeInHierarchy) obj.SetColors();
                 }
             }
         }
