@@ -1,5 +1,6 @@
 ﻿using MenuSaberColors.Models;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.XR;
@@ -13,6 +14,7 @@ namespace MenuSaberColors.Menu
         private const float RetrySeconds = 0.2f;
         private int attempts;
         private float nextAttempt;
+        private readonly List<XRDisplaySubsystem> displays = new();
 
         public MenuPointer? LeftPointer { get; private set; }
         public MenuPointer? RightPointer { get; private set; }
@@ -40,6 +42,17 @@ namespace MenuSaberColors.Menu
 
         private void TryFindPointers()
         {
+            displays.Clear();
+            SubsystemManager.GetSubsystems(displays);
+            var displayRunning = false;
+            foreach (var display in displays)
+            {
+                if (display == null || !display.running) continue;
+                displayRunning = true;
+                break;
+            }
+            if (!displayRunning) return;
+
             attempts++;
             var controllers = Resources.FindObjectsOfTypeAll<VRController>()
                 .Where(controller => controller != null && controller.isActiveAndEnabled && controller.gameObject.scene.isLoaded)
