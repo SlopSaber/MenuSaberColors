@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <GameDirectory Condition="'$(GameDirectory)' == ''">D:\BSManager\BSInstances\1.45.1</GameDirectory>
+    <GameDirectory Condition="'$(GameDirectory)' == ''">D:\BSManager\BSInstances\1.45.2</GameDirectory>
     <BeatSaberDir Condition="'$(BeatSaberDir)' == ''">$(GameDirectory)</BeatSaberDir>
     <CopyPDB>false</CopyPDB>
     <TargetFramework>net472</TargetFramework>
