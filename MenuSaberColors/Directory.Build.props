@@ -8,7 +8,7 @@
 		<PluginName>MenuSaberColors</PluginName>
 		<Authors>Exomanz</Authors>
 		<Version>1.0.13</Version>
-		<GameVersion>1.45.2</GameVersion>
+		<GameVersion>1.45.3</GameVersion>
 		<Description>A PC Port of henri's QonsistentSaberColors, which allows for your menu pointers to be the same color as your selected color scheme!</Description>
 	</PropertyGroup>
 
